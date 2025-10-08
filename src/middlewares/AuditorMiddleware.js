@@ -21,7 +21,7 @@ const getTimestampPrefix = () => {
 // ---------------- Helper: Get client IP ----------------
 function getClientIP(req) {
   return (
-    req.headers['x-forwarded-for']?.split(',')[0] || // if behind a proxy
+    req.headers["x-forwarded-for"]?.split(",")[0] || // if behind a proxy
     req.connection?.remoteAddress ||
     req.socket?.remoteAddress ||
     req.ip
@@ -29,19 +29,21 @@ function getClientIP(req) {
 }
 
 const ipRange = (ip, mask = 24) => {
-  const parts = ip.split('.').map(Number);
+  const parts = ip.split(".").map(Number);
   if (parts.length !== 4) return null;
   const maskBits = 32 - mask;
-  const network = parts.map((octet, i) => {
-    if (i === 3) return octet & (~((1 << maskBits) - 1));
-    return octet;
-  }).join('.');
+  const network = parts
+    .map((octet, i) => {
+      if (i === 3) return octet & ~((1 << maskBits) - 1);
+      return octet;
+    })
+    .join(".");
   return network + `/${mask}`;
 };
 
 // ---------------- Read sensitive fields from env ----------------
 const SENSITIVE_FIELDS = process.env.SENSITIVE_FIELDS
-  ? process.env.SENSITIVE_FIELDS.split(",").map(f => f.trim())
+  ? process.env.SENSITIVE_FIELDS.split(",").map((f) => f.trim())
   : ["password", "pwd", "token", "auth"];
 
 const maskSensitive = (obj) => {
@@ -67,16 +69,13 @@ const getMacAddresses = () => {
   return Array.from(macs); // convert back to array
 };
 
-
 // ---------------- Auditor Middleware ----------------
 const auditorMiddleware = (req, res, next) => {
   try {
     // Ignore Chrome DevTools or other unwanted well-known requests
-    const ignoredPaths = [
-      /^\/\.well-known\/appspecific\/.*$/i
-    ];
+    const ignoredPaths = [/^\/\.well-known\/appspecific\/.*$/i];
 
-    if (ignoredPaths.some(pattern => pattern.test(req.originalUrl))) {
+    if (ignoredPaths.some((pattern) => pattern.test(req.originalUrl))) {
       return res.status(404).end();
     }
 
@@ -101,11 +100,12 @@ const auditorMiddleware = (req, res, next) => {
     // ---------------- Async log incoming request ----------------
     (async () => {
       let ip = getClientIP(req);
-      if (ip === '::1') ip = '127.0.0.1';
+      if (ip === "::1") ip = "127.0.0.1";
 
       try {
         const requestLog = {
           requestId,
+          sessionId: req.headers.sessionid ? req.headers.sessionid : "", 
           requestReceivedTime: req.requestReceivedTime,
           method: req.method,
           url: req.originalUrl,
@@ -113,7 +113,7 @@ const auditorMiddleware = (req, res, next) => {
           query: req.query,
           body: maskSensitive(req.body),
           ip: ip,
-          ipSubnet : ipRange(ip),
+          ipSubnet: ipRange(ip),
           macAddress: getMacAddresses(),
           userAgent: req.headers["user-agent"],
           protocol: req.protocol,
@@ -139,21 +139,22 @@ const auditorMiddleware = (req, res, next) => {
         const duration = Date.now() - start;
         const responseLog = {
           requestId,
+          sessionId: req.headers.sessionid ? req.headers.sessionid : "", 
           status: res.statusCode < 400 ? "SUCCESS" : "ERROR",
           statusCode: res.statusCode,
           response: maskSensitive(responseBody),
           processingTimeMs: duration,
         };
-        await logger.info(`⬅️ Completed Request: ${JSON.stringify(responseLog)}`);
+        await logger.info(
+          `⬅️ Completed Request: ${JSON.stringify(responseLog)}`
+        );
       } catch (err) {
         console.error("Failed to log response:", err);
       }
     });
-
   } catch (err) {
     console.error("Auditor Middleware Error:", err);
   }
-
   next();
 };
 module.exports = { auditorMiddleware, getTimestampPrefix };
